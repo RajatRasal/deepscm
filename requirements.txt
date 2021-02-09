@@ -10,3 +10,4 @@ seaborn==0.11.1
 tensorboard==2.4.0
 torch==1.7.1
 torchvision==0.8.2
+jedi==0.17.2
