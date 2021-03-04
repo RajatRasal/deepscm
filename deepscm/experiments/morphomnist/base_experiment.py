@@ -15,6 +15,7 @@ import pytorch_lightning as pl
 import torch
 import numpy as np
 
+import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -271,6 +272,7 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         if self.current_epoch % self.hparams.sample_img_interval == 0:
             self.sample_images()
+            self.sample_images_with_labels()
 
         self.log_dict(metrics)
 
@@ -427,7 +429,7 @@ class BaseCovariateExperiment(pl.LightningModule):
             batch = self.trainer.accelerator_backend.to_device(batch)
         return batch
 
-    def log_kdes(self, tag, data, save_img=False):
+    def log_kdes(self, tag, data, save_img=False, plot_3d=False):
         """
         requires data to be:
         {'data1': {'x': x, 'y': y}, 'data2': {'x': x, 'y': y}, ..}
@@ -444,6 +446,23 @@ class BaseCovariateExperiment(pl.LightningModule):
                 elif len(covariates) == 2:
                     (x_n, x), (y_n, y) = tuple(covariates.items())
                     sns.kdeplot(x=np_val(x), y=np_val(y), ax=ax[i], shade=True, thresh=0.05)
+                    ax[i].set_ylabel(y_n)
+                elif len(covariates) == 3:
+                    (x_n, x), (y_n, y), (z_n, z) = tuple(covariates.items())
+                    if torch.unique(z) 
+                    print(torch.unique(z))
+                    # TODO: Better way to rename the hue legend
+                    plotting_df = pd.DataFrame(
+                            np.array([np_val(x), np_val(y), np_val(z)]).T,
+                            columns=[x_n, y_n, z_n]
+                    )
+                    print(plotting_df.shape)
+                    if plot_3d:
+                        raise ValueError(f'Not implemented 3-variable joint vis yet')
+                    else:
+                        print('FOUND JP')
+                        # TODO: Legend full only plots reasonable graphs for discrete covariates 
+                        sns.scatterplot(data=plotting_df, x=x_n, y=y_n, hue=z_n, ax=ax[i], legend="full")
                     ax[i].set_ylabel(y_n)
                 else:
                     raise ValueError(f'got too many values: {len(covariates)}')
@@ -520,9 +539,113 @@ class BaseCovariateExperiment(pl.LightningModule):
         self.log_kdes(f'{tag}_sampled', sampled_kdes, save_img=True)
         self.log_kdes(f'{tag}_measured', measured_kdes, save_img=True)
 
+    def sample_images_with_labels(self):
+        with torch.no_grad():
+            # .trace makes a Trace object to store all the results of 
+            # sampling the graphical model within the graph also
+            # .get_trace will sample the model test_batch_size times
+            # and store the results within the trace object
+            sample_trace = pyro.poutine.trace(self.pyro_model.sample) \
+                    .get_trace(self.hparams.test_batch_size)
+
+            samples = sample_trace.nodes['x']['value']
+            sampled_thickness = sample_trace.nodes['thickness']['value']
+            sampled_intensity = sample_trace.nodes['intensity']['value']
+            sampled_label = sample_trace.nodes['label']['value']
+
+            # self.log_img_grid('samples', samples.data[:8])
+
+            # measured_thickness, measured_intensity = self.measure_image(samples)
+
+            # Per class thickness mae
+            """
+            self.logger.experiment.add_scalar(
+                'samples/thickness_mae',
+                torch.mean(torch.abs(sampled_thickness.cpu() - measured_thickness)),
+                self.current_epoch
+            )
+            self.logger.experiment.add_scalar(
+                'samples/intensity_mae',
+                torch.mean(torch.abs(sampled_intensity.cpu() - measured_intensity)),
+                self.current_epoch
+            )
+            """
+
+            # cond_data = {'thickness': self.thickness_range, 'intensity': self.intensity_range, 'z': self.z_range}
+            # samples, *_ = pyro.condition(self.pyro_model.sample, data=cond_data)(9)
+            # self.log_img_grid('cond_samples', samples.data, nrow=3)
+
+            obs_batch = self.prep_batch(self.get_batch(self.val_loader))
+
+            # Class combined KDE 
+            kde_data = {
+                'batch': {
+                    'thickness': obs_batch['thickness'],
+                    'intensity': obs_batch['intensity'],
+                    'label': obs_batch['label'],
+                },
+                'sampled': {
+                    'thickness': sampled_thickness,
+                    'intensity': sampled_intensity,
+                    'label': sampled_label,
+                }
+            }
+            print('HERE')
+            print(kde_data.keys())
+            self.log_kdes('sample_kde_by_label', kde_data, save_img=True, plot_3d=False)
+
+            # TODO: KDEs per class just like in the build counterfactual function
+
+            # TODO: Class conditional counterfactuals
+            """
+            exogeneous = self.pyro_model.infer(**obs_batch)
+
+            for (tag, val) in exogeneous.items():
+                self.logger.experiment.add_histogram(tag, val, self.current_epoch)
+
+            obs_batch = {k: v[:8] for k, v in obs_batch.items()}
+
+            self.log_img_grid('input', obs_batch['x'], save_img=True)
+
+            if hasattr(self.pyro_model, 'reconstruct'):
+                self.build_reconstruction(**obs_batch)
+
+            conditions = {
+                '+1': {'thickness': obs_batch['thickness'] + 1},
+                '+2': {'thickness': obs_batch['thickness'] + 2},
+                '+3': {'thickness': obs_batch['thickness'] + 3}
+            }
+            self.build_counterfactual('do(thickness=+x)', obs=obs_batch, conditions=conditions)
+
+            conditions = {
+                '1': {'thickness': torch.ones_like(obs_batch['thickness'])},
+                '2': {'thickness': torch.ones_like(obs_batch['thickness']) * 2},
+                '3': {'thickness': torch.ones_like(obs_batch['thickness']) * 3}
+            }
+            self.build_counterfactual('do(thickness=x)', obs=obs_batch, conditions=conditions, absolute='thickness')
+
+            conditions = {
+                '-64': {'intensity': obs_batch['intensity'] - 64},
+                '-32': {'intensity': obs_batch['intensity'] - 32},
+                '+32': {'intensity': obs_batch['intensity'] + 32},
+                '+64': {'intensity': obs_batch['intensity'] + 64}
+            }
+            self.build_counterfactual('do(intensity=+x)', obs=obs_batch, conditions=conditions)
+
+            conditions = {
+                '64': {'intensity': torch.zeros_like(obs_batch['intensity']) + 64},
+                '96': {'intensity': torch.zeros_like(obs_batch['intensity']) + 96},
+                '192': {'intensity': torch.zeros_like(obs_batch['intensity']) + 192},
+                '224': {'intensity': torch.zeros_like(obs_batch['intensity']) + 224}
+            }
+            self.build_counterfactual('do(intensity=x)', obs=obs_batch, conditions=conditions, absolute='intensity')
+            """
+            # print('here')
+
     def sample_images(self):
         with torch.no_grad():
-            sample_trace = pyro.poutine.trace(self.pyro_model.sample).get_trace(self.hparams.test_batch_size)
+            sample_trace = pyro.poutine.trace(self.pyro_model.sample) \
+                    .get_trace(self.hparams.test_batch_size)
 
             samples = sample_trace.nodes['x']['value']
             sampled_thickness = sample_trace.nodes['thickness']['value']
@@ -535,6 +658,7 @@ class BaseCovariateExperiment(pl.LightningModule):
             self.logger.experiment.add_scalar('samples/intensity_mae', torch.mean(torch.abs(sampled_intensity.cpu() - measured_intensity)), self.current_epoch)
 
             cond_data = {'thickness': self.thickness_range, 'intensity': self.intensity_range, 'z': self.z_range}
+            # print(cond_data)
             samples, *_ = pyro.condition(self.pyro_model.sample, data=cond_data)(9)
             self.log_img_grid('cond_samples', samples.data, nrow=3)
 
