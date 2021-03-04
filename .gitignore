@@ -1,6 +1,9 @@
 .DS_STORE
 .ipynb_checkpoints
 
+### VIM ##
+.sw[op]
+
 ### PyCharm ###
 .idea/
 

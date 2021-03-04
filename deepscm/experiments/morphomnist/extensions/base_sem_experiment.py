@@ -21,7 +21,6 @@ import numpy as np
 
 from deepscm.experiments.morphomnist.base_experiment import BaseCovariateExperiment, BaseSEM, EXPERIMENT_REGISTRY, MODEL_REGISTRY  # noqa: F401
 
-
 class CustomELBO(TraceGraph_ELBO):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -59,7 +58,7 @@ class BaseVISEM(BaseSEM):
         # TODO: This could be handled by passing a product distribution?
 
         # priors
-        self.label_probs = torch.nn.Parameter(torch.zeros[10, ])
+        self.label_probs = torch.nn.Parameter(torch.ones([10, ]))
 
         self.register_buffer('thickness_base_loc', torch.zeros([1, ], requires_grad=False))
         self.register_buffer('thickness_base_scale', torch.ones([1, ], requires_grad=False))
@@ -142,7 +141,10 @@ class BaseVISEM(BaseSEM):
         self.encoder = Encoder(self.hidden_dim)
 
         # TODO: do we need to replicate the PGM here to be able to run conterfactuals? oO
-        latent_layers = torch.nn.Sequential(torch.nn.Linear(self.hidden_dim + self.context_dim, self.hidden_dim), torch.nn.ReLU())
+        latent_layers = torch.nn.Sequential(
+                torch.nn.Linear(self.hidden_dim + self.context_dim, self.hidden_dim),
+                torch.nn.ReLU()
+        )
         self.latent_encoder = DeepIndepNormal(latent_layers, self.hidden_dim, self.latent_dim)
 
     def _get_preprocess_transforms(self):
@@ -247,9 +249,18 @@ class BaseVISEM(BaseSEM):
             exogeneous = self.infer_exogeneous(z=z, **obs)
             exogeneous = {k: v.detach() for k, v in exogeneous.items()}
             exogeneous['z'] = z
-            counter = pyro.poutine.do(pyro.poutine.condition(self.sample_scm, data=exogeneous), data=condition)(obs['x'].shape[0])
+            counter = pyro.poutine.do(
+                    pyro.poutine.condition(self.sample_scm, data=exogeneous),
+                    data=condition)(obs['x'].shape[0])
             counterfactuals += [counter]
-        return {k: v for k, v in zip(('x', 'z', 'thickness', 'intensity', 'label'), (torch.stack(c).mean(0) for c in zip(*counterfactuals)))}
+
+        _counterfactuals = {}
+        for k, c in zip(('x', 'z', 'thickness', 'intensity', 'label'), zip(*counterfactuals)):
+            # print(k, type(c), c[0].shape, c[0].dtype, c[1].shape, c[1].dtype)
+            v = torch.stack(c).float().mean(0)
+            _counterfactuals[k] = v
+
+        return _counterfactuals
 
     @classmethod
     def add_arguments(cls, parser):
@@ -267,7 +278,7 @@ class BaseVISEM(BaseSEM):
         return parser
 
 
-class SVIExperiment(BaseCovariateExperiment):
+class SVIExtensionExperiment(BaseCovariateExperiment):
     def __init__(self, hparams, pyro_model: BaseSEM):
         super().__init__(hparams, pyro_model)
 
@@ -429,4 +440,4 @@ class SVIExperiment(BaseCovariateExperiment):
         return parser
 
 
-EXPERIMENT_REGISTRY[SVIExperiment.__name__] = SVIExperiment
+EXPERIMENT_REGISTRY[SVIExtensionExperiment.__name__] = SVIExtensionExperiment

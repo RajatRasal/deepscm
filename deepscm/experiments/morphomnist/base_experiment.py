@@ -461,8 +461,11 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         self.logger.experiment.add_figure(tag, fig, self.current_epoch)
 
-    def build_reconstruction(self, x, thickness, intensity, tag='reconstruction'):
+    def build_reconstruction(self, x, thickness, intensity, label=None, tag='reconstruction'):
         obs = {'x': x, 'thickness': thickness, 'intensity': intensity}
+
+        if label is not None:
+            obs['label'] = label
 
         recon = self.pyro_model.reconstruct(**obs, num_particles=self.hparams.num_sample_particles)
         self.log_img_grid(tag, torch.cat([x, recon], 0))
@@ -473,10 +476,14 @@ class BaseCovariateExperiment(pl.LightningModule):
             f'{tag}/thickness_mae', torch.mean(torch.abs(thickness.cpu() - measured_thickness)), self.current_epoch)
         self.logger.experiment.add_scalar(
             f'{tag}/intensity_mae', torch.mean(torch.abs(intensity.cpu() - measured_intensity)), self.current_epoch)
+        # TODO: Add scalar for label
 
     def build_counterfactual(self, tag, obs, conditions, absolute=None):
         _required_data = ('x', 'thickness', 'intensity')
-        assert set(obs.keys()) == set(_required_data), 'got: {}'.format(tuple(obs.keys()))
+
+        if set(obs.keys()) != set(_required_data):
+            if set(obs.keys()) - set(_required_data) != set(['label']):
+                raise Exception('got: {}'.format(tuple(obs.keys())))
 
         imgs = [obs['x']]
         if absolute == 'thickness':
@@ -489,7 +496,6 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         for name, data in conditions.items():
             counterfactual = self.pyro_model._gen_counterfactual(obs=obs, condition=data)
-
             counter = counterfactual['x']
             sampled_thickness = counterfactual['thickness']
             sampled_intensity = counterfactual['intensity']
