@@ -179,7 +179,10 @@ class BaseCovariateExperiment(pl.LightningModule):
         self.test_batch_size = hparams.test_batch_size
 
         if hasattr(hparams, 'num_sample_particles'):
-            self.pyro_model._gen_counterfactual = partial(self.pyro_model.counterfactual, num_particles=self.hparams.num_sample_particles)
+            self.pyro_model._gen_counterfactual = partial(
+                self.pyro_model.counterfactual,
+                num_particles=self.hparams.num_sample_particles
+            )
         else:
             self.pyro_model._gen_counterfactual = self.pyro_model.counterfactual
 
@@ -230,6 +233,7 @@ class BaseCovariateExperiment(pl.LightningModule):
         intensity = 48 * torch.arange(3, dtype=torch.float, device=self.torch_device) + 64
         self.intensity_range = intensity.repeat_interleave(3).unsqueeze(1)
         self.z_range = torch.randn([1, self.hparams.latent_dim], device=self.torch_device, dtype=torch.float).repeat((9, 1))
+        labels = torch.arange(9, dtype=torch.int, device=self.torch_device)
 
         self.pyro_model.intensity_flow_norm_loc = mnist_train.metrics['intensity'].min().to(self.torch_device).float()
         self.pyro_model.intensity_flow_norm_scale = (mnist_train.metrics['intensity'].max() - mnist_train.metrics['intensity'].min()).to(self.torch_device).float()  # noqa: E501
@@ -282,7 +286,8 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         samples = outputs.pop('samples')
 
-        sample_trace = pyro.poutine.trace(self.pyro_model.sample).get_trace(self.hparams.test_batch_size)
+        sample_trace = pyro.poutine.trace(self.pyro_model.sample) \
+            .get_trace(self.hparams.test_batch_size)
         samples['unconditional_samples'] = {
             'x': sample_trace.nodes['x']['value'].cpu(),
             'thickness': sample_trace.nodes['thickness']['value'].cpu(),
@@ -378,6 +383,7 @@ class BaseCovariateExperiment(pl.LightningModule):
         return counterfactuals
 
     def build_test_samples(self, batch):
+        # NOTE: batch is a batch from the test_dataloader
         samples = {}
         samples['reconstruction'] = {'x': self.pyro_model.reconstruct(**batch, num_particles=self.hparams.num_sample_particles)}
 
@@ -412,7 +418,10 @@ class BaseCovariateExperiment(pl.LightningModule):
         trace = pyro.poutine.trace(pyro.condition(sample_pgm, data=cond_data)).get_trace(len(intensity_range))
         trace.compute_log_prob()
 
-        prob_maps['base_distribution'] = {'log_prob': trace.nodes['thickness']['log_prob'] + trace.nodes['intensity']['log_prob'], **cond_data}
+        prob_maps['base_distribution'] = {
+            'log_prob': trace.nodes['thickness']['log_prob'] + trace.nodes['intensity']['log_prob'],
+            **cond_data
+        }
 
         return prob_maps
 
@@ -449,8 +458,7 @@ class BaseCovariateExperiment(pl.LightningModule):
                     ax[i].set_ylabel(y_n)
                 elif len(covariates) == 3:
                     (x_n, x), (y_n, y), (z_n, z) = tuple(covariates.items())
-                    if torch.unique(z) 
-                    print(torch.unique(z))
+                    # print(torch.unique(z))
                     # TODO: Better way to rename the hue legend
                     plotting_df = pd.DataFrame(
                             np.array([np_val(x), np_val(y), np_val(z)]).T,
@@ -576,6 +584,8 @@ class BaseCovariateExperiment(pl.LightningModule):
             # self.log_img_grid('cond_samples', samples.data, nrow=3)
 
             obs_batch = self.prep_batch(self.get_batch(self.val_loader))
+            obs_batch = {k: v[:8] for k, v in obs_batch.items()}
+            # print(obs_batch.keys())
 
             # Class combined KDE 
             kde_data = {
@@ -590,57 +600,26 @@ class BaseCovariateExperiment(pl.LightningModule):
                     'label': sampled_label,
                 }
             }
-            print('HERE')
-            print(kde_data.keys())
             self.log_kdes('sample_kde_by_label', kde_data, save_img=True, plot_3d=False)
 
             # TODO: KDEs per class just like in the build counterfactual function
 
             # TODO: Class conditional counterfactuals
+            conditions = {
+                '0': {'label': torch.ones_like(obs_batch['label']) * 0},
+                '1': {'label': torch.ones_like(obs_batch['label']) * 1},
+                '2': {'label': torch.ones_like(obs_batch['label']) * 2},
+                '3': {'label': torch.ones_like(obs_batch['label']) * 3},
+                '4': {'label': torch.ones_like(obs_batch['label']) * 4},
+                '5': {'label': torch.ones_like(obs_batch['label']) * 5},
+                '6': {'label': torch.ones_like(obs_batch['label']) * 6},
+                '7': {'label': torch.ones_like(obs_batch['label']) * 7},
+                '8': {'label': torch.ones_like(obs_batch['label']) * 8},
+                '9': {'label': torch.ones_like(obs_batch['label']) * 9},
+            }
+            self.build_counterfactual('do(label=x)', obs=obs_batch, conditions=conditions)
             """
-            exogeneous = self.pyro_model.infer(**obs_batch)
-
-            for (tag, val) in exogeneous.items():
-                self.logger.experiment.add_histogram(tag, val, self.current_epoch)
-
-            obs_batch = {k: v[:8] for k, v in obs_batch.items()}
-
-            self.log_img_grid('input', obs_batch['x'], save_img=True)
-
-            if hasattr(self.pyro_model, 'reconstruct'):
-                self.build_reconstruction(**obs_batch)
-
-            conditions = {
-                '+1': {'thickness': obs_batch['thickness'] + 1},
-                '+2': {'thickness': obs_batch['thickness'] + 2},
-                '+3': {'thickness': obs_batch['thickness'] + 3}
-            }
-            self.build_counterfactual('do(thickness=+x)', obs=obs_batch, conditions=conditions)
-
-            conditions = {
-                '1': {'thickness': torch.ones_like(obs_batch['thickness'])},
-                '2': {'thickness': torch.ones_like(obs_batch['thickness']) * 2},
-                '3': {'thickness': torch.ones_like(obs_batch['thickness']) * 3}
-            }
-            self.build_counterfactual('do(thickness=x)', obs=obs_batch, conditions=conditions, absolute='thickness')
-
-            conditions = {
-                '-64': {'intensity': obs_batch['intensity'] - 64},
-                '-32': {'intensity': obs_batch['intensity'] - 32},
-                '+32': {'intensity': obs_batch['intensity'] + 32},
-                '+64': {'intensity': obs_batch['intensity'] + 64}
-            }
-            self.build_counterfactual('do(intensity=+x)', obs=obs_batch, conditions=conditions)
-
-            conditions = {
-                '64': {'intensity': torch.zeros_like(obs_batch['intensity']) + 64},
-                '96': {'intensity': torch.zeros_like(obs_batch['intensity']) + 96},
-                '192': {'intensity': torch.zeros_like(obs_batch['intensity']) + 192},
-                '224': {'intensity': torch.zeros_like(obs_batch['intensity']) + 224}
-            }
-            self.build_counterfactual('do(intensity=x)', obs=obs_batch, conditions=conditions, absolute='intensity')
             """
-            # print('here')
 
     def sample_images(self):
         with torch.no_grad():
