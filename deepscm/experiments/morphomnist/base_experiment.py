@@ -608,18 +608,8 @@ class BaseCovariateExperiment(pl.LightningModule):
             conditions = {
                 '0': {'label': torch.ones_like(obs_batch['label']) * 0},
                 '1': {'label': torch.ones_like(obs_batch['label']) * 1},
-                '2': {'label': torch.ones_like(obs_batch['label']) * 2},
-                '3': {'label': torch.ones_like(obs_batch['label']) * 3},
-                '4': {'label': torch.ones_like(obs_batch['label']) * 4},
-                '5': {'label': torch.ones_like(obs_batch['label']) * 5},
-                '6': {'label': torch.ones_like(obs_batch['label']) * 6},
-                '7': {'label': torch.ones_like(obs_batch['label']) * 7},
-                '8': {'label': torch.ones_like(obs_batch['label']) * 8},
-                '9': {'label': torch.ones_like(obs_batch['label']) * 9},
             }
             self.build_counterfactual('do(label=x)', obs=obs_batch, conditions=conditions)
-            """
-            """
 
     def sample_images(self):
         with torch.no_grad():

@@ -58,7 +58,7 @@ class BaseVISEM(BaseSEM):
         # TODO: This could be handled by passing a product distribution?
 
         # priors
-        self.label_probs = torch.nn.Parameter(torch.ones([10, ]))
+        self.label_probs = torch.nn.Parameter(torch.ones([2, ]))
 
         self.register_buffer('thickness_base_loc', torch.zeros([1, ], requires_grad=False))
         self.register_buffer('thickness_base_scale', torch.ones([1, ], requires_grad=False))
