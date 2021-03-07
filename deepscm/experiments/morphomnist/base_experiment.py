@@ -505,7 +505,7 @@ class BaseCovariateExperiment(pl.LightningModule):
             f'{tag}/intensity_mae', torch.mean(torch.abs(intensity.cpu() - measured_intensity)), self.current_epoch)
         # TODO: Add scalar for label
 
-    def build_counterfactual(self, tag, obs, conditions, absolute=None):
+    def build_counterfactual(self, tag, obs, conditions, absolute=None, **grid_kwargs):
         _required_data = ('x', 'thickness', 'intensity')
 
         if set(obs.keys()) != set(_required_data):
@@ -543,7 +543,7 @@ class BaseCovariateExperiment(pl.LightningModule):
             self.logger.experiment.add_scalar(
                 f'{tag}/{name}/intensity_mae', torch.mean(torch.abs(sampled_intensity.cpu() - measured_intensity)), self.current_epoch)
 
-        self.log_img_grid(tag, torch.cat(imgs, 0))
+        self.log_img_grid(tag, torch.cat(imgs, 0), **grid_kwargs)
         self.log_kdes(f'{tag}_sampled', sampled_kdes, save_img=True)
         self.log_kdes(f'{tag}_measured', measured_kdes, save_img=True)
 
@@ -584,8 +584,7 @@ class BaseCovariateExperiment(pl.LightningModule):
             # self.log_img_grid('cond_samples', samples.data, nrow=3)
 
             obs_batch = self.prep_batch(self.get_batch(self.val_loader))
-            obs_batch = {k: v[:8] for k, v in obs_batch.items()}
-            # print(obs_batch.keys())
+            obs_batch = {k: v[:30] for k, v in obs_batch.items()}
 
             # Class combined KDE 
             kde_data = {
@@ -609,7 +608,7 @@ class BaseCovariateExperiment(pl.LightningModule):
                 '0': {'label': torch.ones_like(obs_batch['label']) * 0},
                 '1': {'label': torch.ones_like(obs_batch['label']) * 1},
             }
-            self.build_counterfactual('do(label=x)', obs=obs_batch, conditions=conditions)
+            self.build_counterfactual('do(label=x)', obs=obs_batch, conditions=conditions, nrow=30)
 
     def sample_images(self):
         with torch.no_grad():
@@ -627,7 +626,6 @@ class BaseCovariateExperiment(pl.LightningModule):
             self.logger.experiment.add_scalar('samples/intensity_mae', torch.mean(torch.abs(sampled_intensity.cpu() - measured_intensity)), self.current_epoch)
 
             cond_data = {'thickness': self.thickness_range, 'intensity': self.intensity_range, 'z': self.z_range}
-            # print(cond_data)
             samples, *_ = pyro.condition(self.pyro_model.sample, data=cond_data)(9)
             self.log_img_grid('cond_samples', samples.data, nrow=3)
 
