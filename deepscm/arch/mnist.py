@@ -7,13 +7,20 @@ from collections.abc import Iterable
 
 
 class Encoder(nn.Module):
-    def __init__(self, hidden_dim: int):
+    def __init__(self, hidden_dim: int, denoising: bool = False):
         super().__init__()
         self.h1_nchan = 64
-        self.conv1 = nn.Sequential(
-            nn.Conv2d(1, self.h1_nchan, kernel_size=4, stride=2, padding=1),
-            nn.LeakyReLU(.1, inplace=True)
-        )
+        if denoising:
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(1, self.h1_nchan, kernel_size=4, stride=2, padding=1),
+                nn.LeakyReLU(.1, inplace=True),
+                nn.Dropout2d(0.5),
+            )
+        else:
+            self.conv1 = nn.Sequential(
+                nn.Conv2d(1, self.h1_nchan, kernel_size=4, stride=2, padding=1),
+                nn.LeakyReLU(.1, inplace=True)
+            )
         self.h2_nchan = 128
         self.conv2 = nn.Sequential(
             nn.Conv2d(self.h1_nchan, self.h2_nchan, kernel_size=4, stride=2, padding=1),
