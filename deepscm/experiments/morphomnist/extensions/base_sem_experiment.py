@@ -138,7 +138,7 @@ class BaseVISEM(BaseSEM):
             raise ValueError('unknown decoder type: {}'.format(self.decoder_type))
 
         # encoder parts
-        self.encoder = Encoder(self.hidden_dim, denoising=True)
+        self.encoder = Encoder(self.hidden_dim)
 
         # TODO: do we need to replicate the PGM here to be able to run conterfactuals? oO
         latent_layers = torch.nn.Sequential(

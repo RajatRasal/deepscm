@@ -1,0 +1,2 @@
+Generated data for:
+ {'data_dir': 'assets/data/morphomnist/class_conditional_38/', 'out_dir': 'assets/data/morphomnist/class_conditional_38/', 'digit_class': [3, 8], 'scale': 0.5, 'invert': False}
