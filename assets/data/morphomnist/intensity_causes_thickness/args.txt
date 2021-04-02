@@ -1,0 +1,2 @@
+Generated data for:
+ {'data_dir': '/vol/biomedic/users/dc315/mnist/original/', 'out_dir': 'assets/data/morphomnist/intensity_causes_thickness/', 'digit_class': None, 'scale': 0.5, 'invert': False}
