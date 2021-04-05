@@ -23,7 +23,6 @@ if __name__ == '__main__':
     print(f'using checkpoint {checkpoint_path}')
 
     _hparams = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-    print(_hparams.keys())
     hparams = _hparams['hyper_parameters']
 
     print(f'found hparams: {hparams}')
@@ -68,12 +67,9 @@ if __name__ == '__main__':
 
     model = model_class(**model_params)
 
-    # print(_hparams['state_dict'].keys())
-    # print(_hparams.keys())
     from argparse import Namespace
 
     experiment = exp_class(Namespace(**_hparams['hyper_parameters']), pyro_model=model)
-    # from_checkpoint(checkpoint_path, pyro_model=model)
 
     print(f'Loaded {experiment.__class__}:\n{experiment}')
 

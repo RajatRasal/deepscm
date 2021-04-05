@@ -22,24 +22,14 @@ class ConditionalReversedVISEM(BaseVISEM):
         super().__init__(**kwargs)
 
         # Learned affine flow for intensity (Normal)
-        self.intensity_flow_components = LearnedAffineTransform()  # context_nn=intensity_net, event_dim=0)
+        self.intensity_flow_components = LearnedAffineTransform()
         self.intensity_flow_constraint_transforms = ComposeTransform([SigmoidTransform(), self.intensity_flow_norm])
         self.intensity_flow_transforms = [self.intensity_flow_components, self.intensity_flow_constraint_transforms]
 
         # Conditional Spline flow for thickness (Gamma)
-        # self.thickness_flow_components = ComposeTransformModule([Spline(1)])
-        self.thickness_flow_preprocess = ComposeTransform([self.thickness_flow_lognorm, SigmoidTransform()])
-        self.thickness_flow_components = conditional_spline(1, 1, count_bins=8, bound=1)
-        self.thickness_flow_constraint_transforms = ComposeTransform([
-            SigmoidTransform().inv,
-            # self.thickness_flow_lognorm,
-            # ExpTransform()
-        ])
-        self.thickness_flow_transforms = [
-            self.thickness_flow_preprocess,
-            self.thickness_flow_components,
-            self.thickness_flow_constraint_transforms,
-        ]
+        self.thickness_flow_components = conditional_spline(1, 1, count_bins=8, bound=3., order='linear')
+        self.thickness_flow_constraint_transforms = ComposeTransform([self.thickness_flow_lognorm, ExpTransform()])
+        self.thickness_flow_transforms = [self.thickness_flow_components, self.thickness_flow_constraint_transforms]
 
     @pyro_method
     def pgm_model(self):
@@ -92,16 +82,19 @@ class ConditionalReversedVISEM(BaseVISEM):
 
         return z
 
-    # @pyro_method
-    # def infer_intensity_base(self, thickness):
-    #     return self.thickness_flow_transforms.inv(thickness)
+    @pyro_method
+    def infer_intensity_base(self, intensity):
+        return self.intensity_flow_constraint_transforms.inv(intensity)
 
-    # @pyro_method
-    # def infer_thickness_base(self, thickness, intensity):
-    #     intensity_base_dist = Normal(self.intensity_base_loc, self.intensity_base_scale)
-    #     cond_intensity_transforms = ComposeTransform(
-    #         ConditionalTransformedDistribution(intensity_base_dist, self.intensity_flow_transforms).condition(thickness).transforms)
-    #     return cond_intensity_transforms.inv(intensity)
+    @pyro_method
+    def infer_thickness_base(self, thickness, intensity):
+        thickness_base_dist = Normal(self.thickness_base_loc, self.thickness_base_scale)
+        cond_thickness_transforms = ComposeTransform(
+            ConditionalTransformedDistribution(thickness_base_dist, self.thickness_flow_transforms) \
+                .condition(intensity) \
+                .transforms
+        )
+        return cond_thickness_transforms.inv(thickness)
 
 
 MODEL_REGISTRY[ConditionalReversedVISEM.__name__] = ConditionalReversedVISEM

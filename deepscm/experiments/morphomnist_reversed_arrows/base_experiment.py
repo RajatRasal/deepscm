@@ -142,6 +142,7 @@ class BaseSEM(PyroModule):
                 continue
 
             fn = node['fn']
+
             if isinstance(fn, Independent):
                 fn = fn.base_dist
             if isinstance(fn, TransformedDistribution):
@@ -167,6 +168,8 @@ class BaseSEM(PyroModule):
 class BaseCovariateExperiment(pl.LightningModule):
     def __init__(self, hparams, pyro_model: BaseSEM):
         super().__init__()
+
+        self.test_datapoints = 32
 
         self.pyro_model = pyro_model
 
@@ -232,17 +235,19 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         self.pyro_model.intensity_flow_norm_loc = mnist_train.metrics['intensity'].min().to(self.torch_device).float()
         self.pyro_model.intensity_flow_norm_scale = (mnist_train.metrics['intensity'].max() - mnist_train.metrics['intensity'].min()).to(self.torch_device).float()  # noqa: E501
+        print(f'set intensity_flow_norm.loc to {self.pyro_model.intensity_flow_norm_loc}')
+        print(f'set intensity_flow_norm.scale to {self.pyro_model.intensity_flow_norm_scale}')
 
         self.pyro_model.thickness_flow_lognorm_loc = mnist_train.metrics['thickness'].log().mean().to(self.torch_device).float()
         self.pyro_model.thickness_flow_lognorm_scale = mnist_train.metrics['thickness'].log().std().to(self.torch_device).float()
-
-        print(f'set thickness_flow_lognorm.loc to {self.pyro_model.thickness_flow_lognorm.loc}')
+        print(f'set thickness_flow_lognorm.loc to {self.pyro_model.thickness_flow_lognorm_loc}')
+        print(f'set thickness_flow_lognorm.scale to {self.pyro_model.thickness_flow_lognorm_scale}')
 
     def configure_optimizers(self):
         pass
 
     def train_dataloader(self):
-        return DataLoader(self.mnist_train, batch_size=self.train_batch_size, shuffle=True)
+        return DataLoader(self.mnist_train, batch_size=self.train_batch_size, shuffle=True, num_workers=8)
 
     def val_dataloader(self):
         self.val_loader = DataLoader(self.mnist_test, batch_size=self.test_batch_size, shuffle=False)
@@ -382,7 +387,10 @@ class BaseCovariateExperiment(pl.LightningModule):
         counterfactuals = self.get_counterfactual_conditions(batch)
 
         for name, condition in counterfactuals.items():
+            # print(name, condition)
             samples[name] = self.pyro_model._gen_counterfactual(obs=batch, condition=condition)
+            # print(samples[name])
+            # print()
 
         return samples
 
@@ -465,7 +473,7 @@ class BaseCovariateExperiment(pl.LightningModule):
         obs = {'x': x, 'thickness': thickness, 'intensity': intensity}
 
         recon = self.pyro_model.reconstruct(**obs, num_particles=self.hparams.num_sample_particles)
-        self.log_img_grid(tag, torch.cat([x, recon], 0))
+        self.log_img_grid(tag, torch.cat([x, recon], 0), nrow=self.test_datapoints)
         self.logger.experiment.add_scalar(f'{tag}/mse', torch.mean(torch.square(x - recon).sum((1, 2, 3))), self.current_epoch)
 
         measured_thickness, measured_intensity = self.measure_image(recon)
@@ -510,7 +518,7 @@ class BaseCovariateExperiment(pl.LightningModule):
             self.logger.experiment.add_scalar(
                 f'{tag}/{name}/intensity_mae', torch.mean(torch.abs(sampled_intensity.cpu() - measured_intensity)), self.current_epoch)
 
-        self.log_img_grid(tag, torch.cat(imgs, 0))
+        self.log_img_grid(tag, torch.cat(imgs, 0), nrow=self.test_datapoints)
         self.log_kdes(f'{tag}_sampled', sampled_kdes, save_img=True)
         self.log_kdes(f'{tag}_measured', measured_kdes, save_img=True)
 
@@ -522,7 +530,7 @@ class BaseCovariateExperiment(pl.LightningModule):
             sampled_thickness = sample_trace.nodes['thickness']['value']
             sampled_intensity = sample_trace.nodes['intensity']['value']
 
-            self.log_img_grid('samples', samples.data[:8])
+            self.log_img_grid('samples', samples.data[:self.test_datapoints], nrow=self.test_datapoints)
 
             measured_thickness, measured_intensity = self.measure_image(samples)
             self.logger.experiment.add_scalar('samples/thickness_mae', torch.mean(torch.abs(sampled_thickness.cpu() - measured_thickness)), self.current_epoch)
@@ -530,7 +538,7 @@ class BaseCovariateExperiment(pl.LightningModule):
 
             cond_data = {'thickness': self.thickness_range, 'intensity': self.intensity_range, 'z': self.z_range}
             samples, *_ = pyro.condition(self.pyro_model.sample, data=cond_data)(9)
-            self.log_img_grid('cond_samples', samples.data, nrow=3)
+            self.log_img_grid('cond_samples', samples.data, nrow=9)
 
             obs_batch = self.prep_batch(self.get_batch(self.val_loader))
 
@@ -545,9 +553,9 @@ class BaseCovariateExperiment(pl.LightningModule):
             for (tag, val) in exogeneous.items():
                 self.logger.experiment.add_histogram(tag, val, self.current_epoch)
 
-            obs_batch = {k: v[:8] for k, v in obs_batch.items()}
+            obs_batch = {k: v[:self.test_datapoints] for k, v in obs_batch.items()}
 
-            self.log_img_grid('input', obs_batch['x'], save_img=True)
+            self.log_img_grid('input', obs_batch['x'], save_img=True, nrow=self.test_datapoints)
 
             if hasattr(self.pyro_model, 'reconstruct'):
                 self.build_reconstruction(**obs_batch)

@@ -241,12 +241,13 @@ class BaseVISEM(BaseSEM):
         counterfactuals = []
         for _ in range(num_particles):
             z = pyro.sample('z', z_dist)
-
             exogeneous = self.infer_exogeneous(z=z, **obs)
+            # print(exogeneous['intensity_base'], exogeneous['thickness_base']) 
             exogeneous = {k: v.detach() for k, v in exogeneous.items()}
             exogeneous['z'] = z
             counter = pyro.poutine.do(pyro.poutine.condition(self.sample_scm, data=exogeneous), data=condition)(obs['x'].shape[0])
             counterfactuals += [counter]
+
         return {k: v for k, v in zip(('x', 'z', 'thickness', 'intensity'), (torch.stack(c).mean(0) for c in zip(*counterfactuals)))}
 
     @classmethod
@@ -401,6 +402,7 @@ class SVIExperiment(BaseCovariateExperiment):
         return {'loss': loss, **metrics}
 
     def test_step(self, batch, batch_idx):
+        # print('TEST STEP')
         batch = self.prep_batch(batch)
 
         loss = self.svi.evaluate_loss(**batch)
