@@ -6,7 +6,6 @@ import torch
 
 from pyro.distributions import Gamma, Normal, TransformedDistribution, Categorical
 from pyro.distributions.transforms import SigmoidTransform, AffineTransform, ComposeTransform
-
 from tqdm import tqdm
 
 from deepscm.datasets.morphomnist import load_morphomnist_like, save_morphomnist_like
@@ -61,7 +60,7 @@ def gen_dataset(args, train=True):
 
     n_samples = len(images)
     with torch.no_grad():
-        intensity, thickness, labels = model(n_samples, scale=args.scale, invert=args.invert)
+        intensity, thickness, _ = model(n_samples, scale=args.scale, invert=args.invert)
 
     metrics = pd.DataFrame(data={'thickness': thickness, 'intensity': intensity})
 

@@ -91,7 +91,7 @@ class MorphoMNISTLike(Dataset):
     def __getitem__(self, idx):
         item = {col: values[idx] for col, values in self.metrics.items()}
         item['image'] = self.images[idx]
-        item['label'] = self.labels[idx]
+        item['label'] = self.labels[idx] 
         return item
 
 
@@ -99,11 +99,11 @@ if __name__ == '__main__':
     from torch.utils.data import DataLoader
 
     # Example usage
-    dataset = MorphoMNISTLike(root_dir="/vol/biomedic/users/dc315/mnist/original",
-                              columns=['slant', 'thickness'], train=False)
+    dataset = MorphoMNISTLike(root_dir="./assets/data/morphomnist/class_conditional_38/",
+                              columns=['intensity', 'thickness'], train=False, reindex_labels=True)
     print(dataset.columns)
-    data_loader = DataLoader(dataset, batch_size=10, shuffle=True)
+    # data_loader = DataLoader(dataset, batch_size=10, shuffle=True)
 
-    for batch in data_loader:
-        print(batch)
-        break
+    # for batch in data_loader:
+    #    print(batch)
+    #    break
