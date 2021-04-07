@@ -71,8 +71,7 @@ def measure_image(x, threshold=0.5, use_progress_bar=True):
 
     return measurements['thickness'].values, get_intensity(imgs, threshold)
 
-experiments = ['IndependentReversedVISEM', 'ConditionalDecoderReversedVISEM',]
-experiments = ['ConditionalReversedVISEM']
+experiments = ['IndependentReversedVISEM', 'ConditionalDecoderReversedVISEM', 'ConditionalReversedVISEM']
 
 models = {'true': true_model,}
 
