@@ -2,7 +2,7 @@
 .ipynb_checkpoints
 
 ### VIM ##
-.sw[op]
+*.sw[op]
 
 ### PyCharm ###
 .idea/
@@ -90,3 +90,6 @@ target/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Project specific
+deepscm/experiments/medical_meshes/notebooks/MNIST

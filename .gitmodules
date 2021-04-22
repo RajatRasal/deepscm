@@ -1,3 +1,6 @@
 [submodule "submodules/morphomnist"]
 	path = deepscm/submodules/morphomnist
 	url = https://github.com/dccastro/Morpho-MNIST.git
+[submodule "deepscm/arch/deepscm/submodules/coma_ukbiobank_mesh"]
+	path = deepscm/arch/deepscm/submodules/coma_ukbiobank_mesh
+	url = https://github.com/RajatRasal/coma_ukbiobank_mesh
