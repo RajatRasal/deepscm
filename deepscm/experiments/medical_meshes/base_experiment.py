@@ -180,7 +180,7 @@ class BaseCovariateExperiment(pl.LightningModule):
         mesh_path = self.hparams.data_dir
         cache_path = self.hparams.cache_dir 
         split = self.hparams.train_test_split
-        substructures = ['BrStem']
+        substructures = [self.hparams.brain_substructure]
         feature_name_map = {
             '31-0.0': 'sex',
             '21003-0.0': 'age',
@@ -322,9 +322,8 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         metrics = {('val/' + k): v for k, v in outputs.items()}
 
-        if self.current_epoch % self.hparams.sample_mesh_interval == 0:
-            pass
-            # self.sample_images()
+        # if self.current_epoch % self.hparams.sample_mesh_interval == 0:
+        self.sample_images()
 
         self.log_dict(metrics)
 
@@ -369,9 +368,7 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         for k, v in samples.items():
             p = os.path.join(self.trainer.logger.experiment.log_dir, f'{k}.pt')
-
             print(f'Saving samples for {k} to {p}')
-
             torch.save(v, p)
 
         p = os.path.join(self.trainer.logger.experiment.log_dir, 'metrics.pt')
@@ -443,7 +440,11 @@ class BaseCovariateExperiment(pl.LightningModule):
 
     def build_test_samples(self, batch):
         samples = {}
-        samples['reconstruction'] = {'x': self.pyro_model.reconstruct(**batch, num_particles=self.hparams.num_sample_particles)}
+        reconstruction = self.pyro_model.reconstruct(
+            **batch,
+            num_particles=self.hparams.num_sample_particles
+        )
+        samples['reconstruction'] = {'x': reconstruction}
 
         counterfactuals = self.get_counterfactual_conditions(batch)
 
@@ -452,17 +453,36 @@ class BaseCovariateExperiment(pl.LightningModule):
 
         return samples
 
-    def log_img_grid(self, tag, imgs, normalize=True, save_img=False, **kwargs):
+    def log_meshes(self, tag, verts, faces, colors, normalize=True, save_img=False, **kwargs):
         if save_img:
             p = os.path.join(self.trainer.logger.experiment.log_dir, f'{tag}.png')
             torchvision.utils.save_image(imgs, p)
-        grid = torchvision.utils.make_grid(imgs, normalize=normalize, **kwargs)
-        self.logger.experiment.add_image(tag, grid, self.current_epoch)
+        camera_config = {
+	    'cls': 'PerspectiveCamera',
+            'fov': 75,
+            'aspect': 0.9,
+        }
+        material_config = {
+            'cls': 'MeshDepthMaterial',
+            'wireframe': True,
+        }
+        config_dict = {
+            'material': material_config,
+            'camera': camera_config,
+        }
+        self.logger.experiment.add_mesh(
+            tag,
+            vertices=verts,
+            colors=colors,
+            faces=faces,
+            global_step=self.current_epoch,
+            config_dict=config_dict,
+        )
 
     def get_batch(self, loader):
         batch = next(iter(self.val_loader))
-        if self.trainer.on_gpu:
-            batch = self.trainer.accelerator_backend.to_device(batch, self.torch_device)
+        # if self.trainer.on_gpu:
+        #    batch = self.trainer.accelerator_backend.to_device(batch, self.torch_device)
         return batch
 
     def log_kdes(self, tag, data, save_img=False):
@@ -496,63 +516,129 @@ class BaseCovariateExperiment(pl.LightningModule):
         self.logger.experiment.add_figure(tag, fig, self.current_epoch)
 
     def build_reconstruction(self, x, age, sex, structure_volume, brain_volume, tag='reconstruction'):
-        obs = {'x': x, 'age': age, 'sex': sex, 'structure_volume': structure_volume, 'brain_volume': brain_volume}
+        obs = {
+            'x': x,
+            'age': age,
+            'sex': sex,
+            'structure_volume': structure_volume,
+            'brain_volume': brain_volume
+        }
+        recon = self.pyro_model.reconstruct(
+            **obs,
+            num_particles=self.hparams.num_sample_particles
+        )
 
-        recon = self.pyro_model.reconstruct(**obs, num_particles=self.hparams.num_sample_particles)
-        self.log_img_grid(tag, torch.cat([x, recon], 0))
-        self.logger.experiment.add_scalar(f'{tag}/mse', torch.mean(torch.square(x - recon).sum((1, 2, 3))), self.current_epoch)
+        face = self.pyro_model.template.face.T
 
-    def build_counterfactual(self, tag, obs, conditions, absolute=None):
+        # TODO: Add difference colours
+        for i in range(x.shape[0]):
+            _tag = f'{tag}/age:{age[i]}, sex:{sex[i]}, sv:{structure_volume[i]}, bv:{brain_volume[i]}'
+            self.log_side_by_side_meshes(_tag, x[i], recon[i], face, self.current_epoch)
+
+        self.logger.experiment.add_scalar(
+            f'{tag}/mse',
+            torch.mean(torch.square(x - recon).sum((1, 2))),
+            self.current_epoch,
+        )
+
+    def log_side_by_side_meshes(self, tag, mesh_1, mesh_2, face, step):
+        # TODO: Move all wiremesh settings out 
+        camera_config = {
+	    'cls': 'PerspectiveCamera',
+            'fov': 75,
+            'aspect': 0.9,
+        }
+        material_config = {
+            'cls': 'MeshDepthMaterial',
+            'wireframe': True,
+        }
+        config_dict = {
+            'material': material_config,
+            'camera': camera_config,
+        }
+        # print(tag)
+        self.logger.experiment.add_mesh(
+            tag,
+            vertices=torch.cat([mesh_1.unsqueeze(0), mesh_2.unsqueeze(0)], 0),
+            faces=face.unsqueeze(0).repeat_interleave(2, 0),
+            global_step=step,
+            config_dict=config_dict,
+        )
+
+    def build_counterfactual(self, obs, conditions, absolute=None):
         _required_data = ('x', 'age', 'sex', 'structure_volume', 'brain_volume')
         assert set(obs.keys()) == set(_required_data), 'got: {}'.format(tuple(obs.keys()))
 
-        imgs = [obs['x']]
+        # meshes = [obs['x']]
         # TODO: decide which kde's to plot in which configuration
         if absolute == 'brain_volume':
             sampled_kdes = {'orig': {'structure_volume': obs['structure_volume']}}
         elif absolute == 'structure_volume':
             sampled_kdes = {'orig': {'brain_volume': obs['brain_volume']}}
         else:
-            sampled_kdes = {'orig': {'brain_volume': obs['brain_volume'], 'structure_volume': obs['structure_volume']}}
+            sampled_kdes = {'orig': {
+                'brain_volume': obs['brain_volume'],
+                'structure_volume': obs['structure_volume']
+            }}
 
+        meshes = []
         for name, data in conditions.items():
             counterfactual = self.pyro_model._gen_counterfactual(obs=obs, condition=data)
 
             counter = counterfactual['x']
+            meshes.append(counter)
+
             sampled_brain_volume = counterfactual['brain_volume']
             sampled_structure_volume = counterfactual['structure_volume']
-
-            imgs.append(counter)
             if absolute == 'brain_volume':
                 sampled_kdes[name] = {'structure_volume': sampled_structure_volume}
             elif absolute == 'structure_volume':
                 sampled_kdes[name] = {'brain_volume': sampled_brain_volume}
             else:
-                sampled_kdes[name] = {'brain_volume': sampled_brain_volume, 'structure_volume': sampled_structure_volume}
+                sampled_kdes[name] = {
+                    'brain_volume': sampled_brain_volume,
+                    'structure_volume': sampled_structure_volume
+                }
 
-        self.log_img_grid(tag, torch.cat(imgs, 0))
-        self.log_kdes(f'{tag}_sampled', sampled_kdes, save_img=True)
+        return meshes, sampled_kdes 
 
     def sample_images(self):
         with torch.no_grad():
             # TODO: redo all this....
-            sample_trace = pyro.poutine.trace(self.pyro_model.sample).get_trace(self.hparams.test_batch_size)
+            vis_meshes = 4
+            faces = self.pyro_model.template.face.T \
+                .unsqueeze(0) \
+                .repeat_interleave(vis_meshes, 0)
+
+            sample_trace = pyro.poutine.trace(self.pyro_model.sample) \
+                .get_trace(self.hparams.test_batch_size)
 
             samples = sample_trace.nodes['x']['value']
             sampled_brain_volume = sample_trace.nodes['brain_volume']['value']
             sampled_structure_volume = sample_trace.nodes['structure_volume']['value']
+            
+            self.log_meshes('samples', samples.data[:vis_meshes], faces, None)
 
-            self.log_img_grid('samples', samples.data[:8])
-
-            cond_data = {'brain_volume': self.brain_volume_range, 'structure_volume': self.structure_volume_range, 'z': self.z_range}
+            cond_data = {
+                'brain_volume': self.brain_volume_range,
+                'structure_volume': self.structure_volume_range,
+                'z': self.z_range
+            }
             samples, *_ = pyro.condition(self.pyro_model.sample, data=cond_data)(9)
-            self.log_img_grid('cond_samples', samples.data, nrow=3)
+            self.log_meshes('cond_samples', samples.data[:vis_meshes], faces, None,)
 
+            # TODO: Get the indices which I have choosen from the notebook
             obs_batch = self.prep_batch(self.get_batch(self.val_loader))
 
             kde_data = {
-                'batch': {'brain_volume': obs_batch['brain_volume'], 'structure_volume': obs_batch['structure_volume']},
-                'sampled': {'brain_volume': sampled_brain_volume, 'structure_volume': sampled_structure_volume}
+                'batch': {
+                    'brain_volume': obs_batch['brain_volume'],
+                    'structure_volume': obs_batch['structure_volume']
+                },
+                'sampled': {
+                    'brain_volume': sampled_brain_volume,
+                    'structure_volume': sampled_structure_volume
+                },
             }
             self.log_kdes('sample_kde', kde_data, save_img=True)
 
@@ -561,34 +647,80 @@ class BaseCovariateExperiment(pl.LightningModule):
             for (tag, val) in exogeneous.items():
                 self.logger.experiment.add_histogram(tag, val, self.current_epoch)
 
-            obs_batch = {k: v[:8] for k, v in obs_batch.items()}
+            # Batch for visualisations
+            obs_batch = {k: v for k, v in obs_batch.items()}
 
-            self.log_img_grid('input', obs_batch['x'], save_img=True)
+            ####
+            # Sanity Check - plotting inputs
+            ###
+            self.log_meshes('input', obs_batch['x'][:vis_meshes], faces, None)
 
-            if hasattr(self.pyro_model, 'reconstruct'):
-                self.build_reconstruction(**obs_batch)
+            ####
+            # Reconstructions - plotted beside corresponding input
+            ###
+            self.build_reconstruction(**{
+                k: v[:vis_meshes] for k, v in obs_batch.items()
+            })
 
+            ######
+            # Plotting Age Counterfactuals
+            ######
+            # TODO: Wider age ranges
             conditions = {
                 '40': {'age': torch.zeros_like(obs_batch['age']) + 40},
                 '60': {'age': torch.zeros_like(obs_batch['age']) + 60},
                 '80': {'age': torch.zeros_like(obs_batch['age']) + 80}
             }
-            self.build_counterfactual('do(age=x)', obs=obs_batch, conditions=conditions)
+            meshes, sampled_kdes = self.build_counterfactual(
+                obs=obs_batch,
+                conditions=conditions,
+            )
 
+            self.log_kdes(f'do(age=x)_sampled', sampled_kdes, save_img=True)
+
+            for i in range(vis_meshes):
+                cond_meshes = [meshes[c][i].unsqueeze(0) for c in range(len(conditions))]
+                plot_meshes = [obs_batch['x'][i].unsqueeze(0)] + cond_meshes
+                tag = f'do(age=x) age:{obs_batch["age"][i]} sex:{obs_batch["sex"][i]} sv:{obs_batch["structure_volume"][i]} bv:{obs_batch["brain_volume"][i]}' 
+                self.log_meshes(tag, torch.cat(plot_meshes, 0), faces, None)
+
+            ######
+            # Plotting Sex Counterfactuals
+            ######
             conditions = {
                 '0': {'sex': torch.zeros_like(obs_batch['sex'])},
                 '1': {'sex': torch.ones_like(obs_batch['sex'])},
             }
-            self.build_counterfactual('do(sex=x)', obs=obs_batch, conditions=conditions)
+            meshes, sampled_kdes = self.build_counterfactual(
+                obs=obs_batch,
+                conditions=conditions,
+            )
 
+            self.log_kdes(f'do(sex=x)_sampled', sampled_kdes, save_img=True)
+
+            for i in range(vis_meshes):
+                plot_meshes = [meshes[c][i].unsqueeze(0) for c in range(len(conditions))]
+                tag = f'do(sex=x) age:{obs_batch["age"][i]} sex:{obs_batch["sex"][i]} sv:{obs_batch["structure_volume"][i]} bv:{obs_batch["brain_volume"][i]}' 
+                self.log_meshes(tag, torch.cat(plot_meshes, 0), faces, None)
+
+            """
+            ######
+            # Plotting Brain Volume Counterfactuals
+            ######
             conditions = {
                 '800000': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 800000},
                 '1100000': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1100000},
                 '1400000': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1400000},
                 '1600000': {'brain_volume': torch.zeros_like(obs_batch['brain_volume']) + 1600000}
             }
-            self.build_counterfactual('do(brain_volume=x)', obs=obs_batch, conditions=conditions, absolute='brain_volume')
+            self.build_counterfactual(
+                'do(brain_volume=x)',
+                obs=obs_batch,
+                conditions=conditions,
+                absolute='brain_volume'
+            )
 
+            # TODO: Based on which structure is being modelled 
             conditions = {
                 '10000': {'structure_volume': torch.zeros_like(obs_batch['structure_volume']) + 10000},
                 '25000': {'structure_volume': torch.zeros_like(obs_batch['structure_volume']) + 25000},
@@ -596,18 +728,35 @@ class BaseCovariateExperiment(pl.LightningModule):
                 '75000': {'structure_volume': torch.zeros_like(obs_batch['structure_volume']) + 75000},
                 '110000': {'structure_volume': torch.zeros_like(obs_batch['structure_volume']) + 110000}
             }
-            self.build_counterfactual('do(structure_volume=x)', obs=obs_batch, conditions=conditions, absolute='structure_volume')
+            self.build_counterfactual(
+                'do(structure_volume=x)',
+                obs=obs_batch,
+                conditions=conditions,
+                absolute='structure_volume'
+            )
+            """
 
     @classmethod
     def add_arguments(cls, parser):
         parser.add_argument('--data_dir', default="/vol/biomedic3/bglocker/brainshapes", type=str, help="data dir (default: %(default)s)")  # noqa: E501
         parser.add_argument('--csv_path', default="/vol/biomedic3/bglocker/brainshapes/ukb21079_extracted.csv", type=str, help="csv metadata dir (default: %(default)s)")  # noqa: E501
         parser.add_argument('--cache_dir', default="/vol/bitbucket/rrr2417/deepscm_data_cache", type=str, help="location to cache dataset metadata (default: %(default)s)")  # noqa: E501
-        parser.add_argument('--sample_mesh_interval', default=10, type=int, help="interval in which to sample and log meshes (default: %(default)s)")
+        parser.add_argument('--sample_mesh_interval', default=1, type=int, help="interval in which to sample and log meshes (default: %(default)s)")
         parser.add_argument('--train_batch_size', default=10, type=int, help="train batch size (default: %(default)s)")
-        parser.add_argument('--test_batch_size', default=10, type=int, help="train batch size (default: %(default)s)")
+        parser.add_argument('--test_batch_size', default=50, type=int, help="train batch size (default: %(default)s)")
         parser.add_argument('--train_test_split', default=0.8, type=float, help="train-test split (default: %(default)s)")
         parser.add_argument('--train_val_split', default=0.1, type=float, help="fraction of train set to allocate as val (default: %(default)s)")
+        substructures = [
+            'BrStem', 'L_Accu', 'L_Amyg', 'L_Caud', 'L_Hipp',
+            'L_Pall', 'L_Puta', 'L_Thal', 'R_Accu', 'R_Amyg',
+            'R_Caud', 'R_Hipp', 'R_Pall', 'R_Puta', 'R_Thal',
+        ]
+        parser.add_argument(
+            '--brain_substructure',
+            default='BrStem',
+            choices=substructures,
+            help="Substructure to model (default: %(default)s)"
+        )
         parser.add_argument('--validate', default=False, action='store_true', help="whether to validate (default: %(default)s)")
         parser.add_argument('--lr', default=1e-4, type=float, help="lr of deep part (default: %(default)s)")
         parser.add_argument('--pgm_lr', default=5e-3, type=float, help="lr of pgm (default: %(default)s)")

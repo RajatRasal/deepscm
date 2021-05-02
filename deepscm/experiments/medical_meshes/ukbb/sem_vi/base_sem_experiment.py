@@ -34,9 +34,6 @@ from deepscm.experiments.medical_meshes.base_experiment import (
 )
 
 
-TEMPLATE_PATH = '/vol/biomedic3/bglocker/brainshapes/5026976/T1_first-BrStem_first.vtk'
-
-
 class CustomELBO(TraceGraph_ELBO):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -63,15 +60,18 @@ class Lambda(torch.nn.Module):
 
 class BaseVISEM(BaseSEM):
     context_dim = 0
-    # TODO: Remove hard coding
-    img_shape = (642, 3) 
 
     def __init__(self, latent_dim: int = 8, logstd_init: float = -5, in_channels: int = 3,
         filters: List[int] = [32, 32, 32, 64], pooling_factor: int = 4, cheb_k: int = 10,
-        decoder_type: str = 'normal', decoder_cov_rank: int = 10, template_path: str = TEMPLATE_PATH, 
-        gpu: int = 1, **kwargs
+        decoder_type: str = 'normal', decoder_cov_rank: int = 10, 
+        template_path: str = '/vol/biomedic3/bglocker/brainshapes/5026976/T1_first-BrStem_first.vtk',
+        gpu: int = 1, img_shape: List[int] = [642, 3], **kwargs
     ):
         super().__init__(**kwargs)
+
+        # TODO: Remove hard coding
+        self.img_shape = tuple(img_shape)
+        print(self.img_shape)
 
         self.latent_dim = latent_dim
         self.logstd_init = logstd_init
@@ -148,11 +148,7 @@ class BaseVISEM(BaseSEM):
 
             torch.nn.init.normal_(self.decoder.logdiag_head.bias, self.logstd_init, 1e-1)
             self.decoder.logdiag_head.bias.requires_grad = True
-        # elif self.decoder_type == 'lowrank_multivariate_gaussian':
-        #     self.decoder = DeepLowRankMultivariateNormal(seq, np.prod(self.img_shape), np.prod(self.img_shape), decoder_cov_rank)
         elif self.decoder_type == 'sharedvar_lowrank_multivariate_gaussian':
-            # self.decoder = DeepLowRankMultivariateNormal(seq, np.prod(self.img_shape), np.prod(self.img_shape), decoder_cov_rank)
-
             torch.nn.init.zeros_(self.decoder.logdiag_head.weight)
             self.decoder.logdiag_head.weight.requires_grad = False
 
@@ -267,17 +263,12 @@ class BaseVISEM(BaseSEM):
 
     def _get_transformed_x_dist(self, latent):
         x_pred_dist = self.decoder.predict(latent)
-        # print(x_pred_dist)
         x_base_dist = Normal(self.x_base_loc, self.x_base_scale).to_event(2)
 
-        # preprocess_transform = self._get_preprocess_transforms()
         reshape_transform = ReshapeTransform(self.img_shape, (np.prod(self.img_shape), ))
 
         if isinstance(x_pred_dist, MultivariateNormal) or isinstance(x_pred_dist, LowRankMultivariateNormal):
             transform = LowerCholeskyAffine(x_pred_dist.loc, x_pred_dist.scale_tril)
-            # reshape_transform = ReshapeTransform(self.img_shape, (np.prod(self.img_shape), ))
-            # x_reparam_transform = ComposeTransform([reshape_transform, chol_transform, reshape_transform.inv])
-            # x_reparam_transform = ComposeTransform([chol_transform])
         elif isinstance(x_pred_dist, Independent) or isinstance(x_pred_dist, Normal):
             x_pred_dist = x_pred_dist.base_dist
             transform = AffineTransform(x_pred_dist.loc, x_pred_dist.scale, 2)
@@ -369,18 +360,66 @@ class BaseVISEM(BaseSEM):
     def add_arguments(cls, parser):
         parser = super().add_arguments(parser)
 
-        parser.add_argument('--latent_dim', default=8, type=int, help="latent dimension of model (default: %(default)s)")
-        parser.add_argument('--logstd_init', default=-5, type=float, help="init of logstd (default: %(default)s)")
-        parser.add_argument('--in_channels', default=3, type=int, help="input dimensions (default: %(default)s)")
-        parser.add_argument('--filters', default=[16, 32, 64, 128], nargs='+', type=int, help="filters at each layer (default: %(default)s)")
-        parser.add_argument('--pooling_factor', default=2, type=int, help="pooling factor (default: %(default)s)")
-        parser.add_argument('--cheb_k', default=10, type=int, help="hops in ChebConv (default: %(default)s)")
+        parser.add_argument(
+            '--latent_dim',
+            default=8,
+            type=int,
+            help="latent dimension of model (default: %(default)s)"
+        )
+        parser.add_argument(
+            '--logstd_init',
+            default=-5,
+            type=float,
+            help="init of logstd (default: %(default)s)"
+        )
+        parser.add_argument(
+            '--in_channels',
+            default=3,
+            type=int,
+            help="input dimensions (default: %(default)s)"
+        )
+        parser.add_argument(
+            '--filters',
+            default=[16, 32, 64, 128],
+            nargs='+',
+            type=int,
+            help="filters at each layer (default: %(default)s)"
+        )
+        parser.add_argument(
+            '--pooling_factor',
+            default=2,
+            type=int,
+            help="pooling factor (default: %(default)s)"
+        )
+        parser.add_argument(
+            '--cheb_k',
+            default=10,
+            type=int,
+            help="hops in ChebConv (default: %(default)s)"
+        )
         parser.add_argument(
             '--decoder_type', default='normal', help="var type (default: %(default)s)",
             choices=['normal', 'sharedvar_multivariate_gaussian', 'multivariate_gaussian',
                      'sharedvar_lowrank_multivariate_gaussian', 'lowrank_multivariate_gaussian'])
-        parser.add_argument('--decoder_cov_rank', default=10, type=int, help="rank for lowrank cov approximation (requires lowrank decoder) (default: %(default)s)")  # noqa: E501
-        parser.add_argument('--template_path', default=TEMPLATE_PATH, type=str, help="Path for a mesh")
+        parser.add_argument(
+            '--decoder_cov_rank',
+            default=10,
+            type=int,
+            help="rank for lowrank cov approximation (requires lowrank decoder) (default: %(default)s)"
+        )  # noqa: E501
+        parser.add_argument(
+            '--template_path',
+            default='/vol/biomedic3/bglocker/brainshapes/5026976/T1_first-BrStem_first.vtk',
+            type=str,
+            help="Path for a mesh"
+        )
+        parser.add_argument(
+            '--img_shape',
+            default=[642, 3],
+            nargs='+',
+            type=int,
+            help="Input shape size (default: %(default)s)"
+        )
 
         return parser
 
@@ -490,7 +529,7 @@ class SVIExperiment(BaseCovariateExperiment):
 
     def prep_batch(self, batch):
         # TODO: Batch will be a tuple with a dataframe + batch of graphs
-        x = batch.x.float()
+        x = batch.x.float().to(self.torch_device)
         features = batch.features
         age = self.__series_to_batched_tensor(features.age)
         sex = self.__series_to_batched_tensor(features.sex)
