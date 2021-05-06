@@ -60,7 +60,10 @@ if __name__ == '__main__':
 
     lightning_args = groups['lightning_options']
 
-    logger = TensorBoardLogger(lightning_args.default_root_dir, name=f'{exp_args.experiment}/{exp_args.model}')
+    logger = TensorBoardLogger(
+        lightning_args.default_root_dir,
+        name=f'{exp_args.experiment}/{exp_args.model}'
+    )
     lightning_args.logger = logger
 
     hparams = groups['experiment']
@@ -74,9 +77,12 @@ if __name__ == '__main__':
 
     model = model_class(**vars(model_params))
     experiment = exp_class(hparams, model)
-    print(model)
 
     if not args.validate:
-        warnings.filterwarnings('ignore', message='.*was not registered in the param store because.*', module=r'pyro\.primitives')
+        warnings.filterwarnings(
+            'ignore',
+            message='.*was not registered in the param store because.*',
+            module=r'pyro\.primitives'
+        )
 
     trainer.fit(experiment)
