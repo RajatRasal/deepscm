@@ -1,2 +1,2 @@
 Generated data for:
- {'data_dir': None, 'out_dir': None, 'digit_class': None, 'scale': 0.5, 'invert': False}
+ {'data_dir': 'assets/data/morphomnist/train-labels-idx1-label38-ubyte.gz', 'out_dir': 'assets/data/morphomnist/', 'digit_class': [3, 8], 'scale': 0.5, 'invert': False}

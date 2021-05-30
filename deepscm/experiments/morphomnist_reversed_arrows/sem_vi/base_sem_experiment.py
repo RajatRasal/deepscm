@@ -140,7 +140,10 @@ class BaseVISEM(BaseSEM):
         self.encoder = Encoder(self.hidden_dim)
 
         # TODO: do we need to replicate the PGM here to be able to run conterfactuals? oO
-        latent_layers = torch.nn.Sequential(torch.nn.Linear(self.hidden_dim + self.context_dim, self.hidden_dim), torch.nn.ReLU())
+        latent_layers = torch.nn.Sequential(
+            torch.nn.Linear(self.hidden_dim + self.context_dim, self.hidden_dim),
+            torch.nn.ReLU()
+        )
         self.latent_encoder = DeepIndepNormal(latent_layers, self.hidden_dim, self.latent_dim)
 
     def _get_preprocess_transforms(self):
@@ -242,7 +245,6 @@ class BaseVISEM(BaseSEM):
         for _ in range(num_particles):
             z = pyro.sample('z', z_dist)
             exogeneous = self.infer_exogeneous(z=z, **obs)
-            # print(exogeneous['intensity_base'], exogeneous['thickness_base']) 
             exogeneous = {k: v.detach() for k, v in exogeneous.items()}
             exogeneous['z'] = z
             counter = pyro.poutine.do(pyro.poutine.condition(self.sample_scm, data=exogeneous), data=condition)(obs['x'].shape[0])

@@ -181,10 +181,30 @@ class BaseCovariateExperiment(pl.LightningModule):
         cache_path = self.hparams.cache_dir 
         split = self.hparams.train_test_split
         substructures = [self.hparams.brain_substructure]
+
+        # TODO: Remove hardcoding for UDIs in UKBB CSV
+        substructure_to_udi = {
+            'BrStem': '25025-2.0', 
+            'L_Thal': '25011-2.0',
+            'L_Caud': '25013-2.0',
+            'L_Puta': '25015-2.0',
+            'L_Pall': '25017-2.0',
+            'L_Hipp': '25019-2.0',
+            'L_Amyg': '25021-2.0',
+            'L_Accu': '25023-2.0',
+            'R_Thal': '25012-2.0',
+            'R_Caud': '25014-2.0',
+            'R_Puta': '25016-2.0',
+            'R_Pall': '25018-2.0',
+            'R_Hipp': '25020-2.0',
+            'R_Amyg': '25022-2.0',
+            'R_Accu': '25024-2.0',
+        }
+
         feature_name_map = {
             '31-0.0': 'sex',
             '21003-0.0': 'age',
-            '25025-2.0': 'structure_volume',  # Brain Stem
+            substructure_to_udi[self.hparams.brain_substructure]: 'structure_volume',  # Brain Stem
             '25010-2.0': 'brain_volume',  # Unnormalised brain volume from UKBB
         }
 
@@ -232,6 +252,7 @@ class BaseCovariateExperiment(pl.LightningModule):
         self.ukbb_test = test_dataset
 
         self.torch_device = self.trainer.root_gpu if self.trainer.on_gpu else self.trainer.root_device
+        print('-------------------', self.torch_device)
 
         # Ranges for plotting
         train_metrics = pd.concat([

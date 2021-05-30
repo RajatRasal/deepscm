@@ -44,7 +44,7 @@ def gen_dataset(args, train=True):
     images_, labels, _ = load_morphomnist_like(args.data_dir, train=train)
 
     if args.digit_class is not None:
-        mask = (labels == args.digit_class)
+        mask = np.isin(labels, np.array(args.digit_class))
         images_ = images_[mask]
         labels = labels[mask]
 
@@ -57,6 +57,7 @@ def gen_dataset(args, train=True):
     metrics = pd.DataFrame(data={'thickness': thickness, 'intensity': intensity})
 
     for n, (thickness, intensity) in enumerate(tqdm(zip(thickness, intensity), total=n_samples)):
+        print(thickness)
         morph = ImageMorphology(images_[n], scale=16)
         tmp_img = morph.downscale(np.float32(SetThickness(thickness)(morph)))
 
@@ -77,7 +78,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-dir', type=str, default='/vol/biomedic/users/dc315/mnist/original/', help="Path to MNIST (default: %(default)s)")
     parser.add_argument('-o', '--out-dir', type=str, help="Path to store new dataset")
-    parser.add_argument('-d', '--digit-class', type=int, choices=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], help="digit class to select")
+    parser.add_argument('-d', '--digit-class', type=int, choices=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9], action='append', help="digit class to select")
     parser.add_argument('-s', '--scale', type=float, default=0.5, help="scale of logit normal")
     parser.add_argument('-i', '--invert', default=False, action='store_true', help="inverses correlation")
 

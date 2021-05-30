@@ -22,7 +22,7 @@ if __name__ == '__main__':
 
     print(f'using checkpoint {checkpoint_path}')
 
-    hparams = torch.load(checkpoint_path, map_location=torch.device('cpu'))['hparams']
+    hparams = torch.load(checkpoint_path, map_location=torch.device('cpu'))['hyper_parameters']
 
     print(f'found hparams: {hparams}')
 
@@ -39,7 +39,7 @@ if __name__ == '__main__':
     if args.gpus is not None and isinstance(args.gpus, int):
         # Make sure that it only uses a single GPU..
         os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpus)
-        args.gpus = 1
+        args.gpus = 0
 
     # TODO: push to lightning
     args.gradient_clip_val = float(args.gradient_clip_val)
@@ -57,16 +57,20 @@ if __name__ == '__main__':
     model_class = MODEL_REGISTRY[hparams['model']]
 
     model_params = {
-        k: v for k, v in hparams.items() if (k in inspect.signature(model_class.__init__).parameters
-                                             or k in k in inspect.signature(model_class.__bases__[0].__init__).parameters
-                                             or k in k in inspect.signature(model_class.__bases__[0].__bases__[0].__init__).parameters)
+        k: v for k, v in hparams.items() if (
+            k in inspect.signature(model_class.__init__).parameters
+            or k in k in inspect.signature(model_class.__bases__[0].__init__).parameters
+            or k in k in inspect.signature(model_class.__bases__[0].__bases__[0].__init__).parameters
+        )
     }
 
     print(f'building model with params: {model_params}')
-
+    model_params['gpu'] = 1
     model = model_class(**model_params)
 
-    experiment = exp_class.load_from_checkpoint(checkpoint_path, pyro_model=model)
+    hparams = argparse.Namespace(**hparams)
+    hparams.gpu = 1
+    experiment = exp_class.load_from_checkpoint(checkpoint_path, pyro_model=model, hparams=hparams)
 
     print(f'Loaded {experiment.__class__}:\n{experiment}')
 

@@ -24,7 +24,7 @@ class SetThickness(Perturbation):
         if radius in self._disk_cache:
             disk = self._disk_cache[radius]
         else:
-            disk = _get_disk(radius, scale=16)
+            disk = _get_disk(radius, scale=morph.scale)  # 16)
             self._disk_cache[radius] = disk
         img = morph.binary_image
         if delta >= 0:

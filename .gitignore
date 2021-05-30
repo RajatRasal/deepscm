@@ -1,5 +1,11 @@
 .DS_STORE
 .ipynb_checkpoints
+*.pickle
+*.obj
+
+### Images
+*.png
+*.jpg
 
 ### VIM ##
 *.sw[op]

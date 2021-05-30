@@ -17,7 +17,6 @@ import pandas as pd
 import inspect
 from collections import OrderedDict
 from functools import partial
-import torch
 
 import traceback
 import warnings

@@ -10,7 +10,6 @@ from pyro.distributions.transforms import (
 from pyro.distributions.torch_transform import ComposeTransformModule
 from pyro.distributions.conditional import ConditionalTransformedDistribution
 from deepscm.distributions.transforms.affine import LearnedAffineTransform
-from pyro.nn import DenseNN
 
 from .base_sem_experiment import BaseVISEM, MODEL_REGISTRY
 
@@ -24,7 +23,10 @@ class ConditionalReversedVISEM(BaseVISEM):
         # Learned affine flow for intensity (Normal)
         self.intensity_flow_components = LearnedAffineTransform()
         self.intensity_flow_constraint_transforms = ComposeTransform([SigmoidTransform(), self.intensity_flow_norm])
-        self.intensity_flow_transforms = [self.intensity_flow_components, self.intensity_flow_constraint_transforms]
+        self.intensity_flow_transforms = ComposeTransform([
+            self.intensity_flow_components,
+            self.intensity_flow_constraint_transforms
+        ])
 
         # Conditional Spline flow for thickness (Gamma)
         self.thickness_flow_components = conditional_spline(1, 1, count_bins=8, bound=3., order='linear')
@@ -34,10 +36,6 @@ class ConditionalReversedVISEM(BaseVISEM):
     @pyro_method
     def pgm_model(self):
         intensity_base_dist = Normal(self.intensity_base_loc, self.intensity_base_scale).to_event(1)
-        intensity_dist = TransformedDistribution(intensity_base_dist, self.intensity_flow_transforms)
-
-        intensity = pyro.sample('intensity', intensity_dist)
-        intensity_ = self.intensity_flow_constraint_transforms.inv(intensity)
         # pseudo call to intensity_flow_transforms to register with pyro
         _ = self.intensity_flow_components
 
@@ -84,7 +82,7 @@ class ConditionalReversedVISEM(BaseVISEM):
 
     @pyro_method
     def infer_intensity_base(self, intensity):
-        return self.intensity_flow_constraint_transforms.inv(intensity)
+        return self.intensity_flow_transforms.inv(intensity)
 
     @pyro_method
     def infer_thickness_base(self, thickness, intensity):

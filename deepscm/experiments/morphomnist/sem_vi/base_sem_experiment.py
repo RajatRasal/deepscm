@@ -349,7 +349,6 @@ class SVIExperiment(BaseCovariateExperiment):
         metrics['log p(x)'] = model.nodes['x']['log_prob'].mean()
         metrics['log p(intensity)'] = model.nodes['intensity']['log_prob'].mean()
         metrics['log p(thickness)'] = model.nodes['thickness']['log_prob'].mean()
-        print(metrics['log p(thickness)']) 
         metrics['log p(label)'] = model.nodes['label']['log_prob'].mean()
         metrics['p(z)'] = model.nodes['z']['log_prob'].mean()
         metrics['q(z)'] = guide.nodes['z']['log_prob'].mean()

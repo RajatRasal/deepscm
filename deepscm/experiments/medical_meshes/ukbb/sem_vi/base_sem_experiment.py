@@ -94,7 +94,8 @@ class BaseVISEM(BaseSEM):
         # print(kwargs)
         # print('----------------------------------------------')
         # print()
-        device = torch.device('cuda' if gpu else 'cpu')
+        device = torch.device('gpu' if gpu else 'cpu')
+        print('++++++++++++++++', device)
         edge_index_list, down_transform_list, up_transform_list = init_coma_pooling(
             self.template, self.pooling_factor, self.depth, device,
         )
@@ -131,15 +132,7 @@ class BaseVISEM(BaseSEM):
 
         self.decoder = decoders[self.decoder_type](*out_dist_args)
 
-        # TODO: Edit VAE code to accept decoders and encoders as input
-        # TODO: Take the decoder and encoder as input
-        # if self.decoder_type == 'normal':
-        #     self.decoder = DeepIndepNormal(*out_dist_args)
-        # elif self.decoder_type == 'multivariate_gaussian':
-        #     self.decoder = DeepMultivariateNormal(*out_dist_args)
         if self.decoder_type == 'sharedvar_multivariate_gaussian':
-            # self.decoder = DeepMultivariateNormal(seq, np.prod(self.img_shape), np.prod(self.img_shape))
-
             torch.nn.init.zeros_(self.decoder.logdiag_head.weight)
             self.decoder.logdiag_head.weight.requires_grad = False
 
@@ -549,7 +542,6 @@ class SVIExperiment(BaseCovariateExperiment):
         return outs
 
     def training_step(self, batch, batch_idx):
-        # print(self.pyro_model.device)
         batch = self.prep_batch(batch)
 
         # if self.hparams.validate:
