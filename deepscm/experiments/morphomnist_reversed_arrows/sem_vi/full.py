@@ -22,11 +22,13 @@ class ConditionalReversedVISEM(BaseVISEM):
         super().__init__(**kwargs)
 
         # Learned affine flow for intensity (Normal)
-        self.intensity_flow_components = LearnedAffineTransform()
+        # self.intensity_flow_components = LearnedAffineTransform()
+        self.intensity_flow_components = ComposeTransformModule([LearnedAffineTransform(), Spline(1)])
         self.intensity_flow_constraint_transforms = ComposeTransform([SigmoidTransform(), self.intensity_flow_norm])
         self.intensity_flow_transforms = [self.intensity_flow_components, self.intensity_flow_constraint_transforms]
 
         # Conditional Spline flow for thickness (Gamma)
+        # 8 and 3 are the default parameters
         self.thickness_flow_components = conditional_spline(1, 1, count_bins=8, bound=3., order='linear')
         self.thickness_flow_constraint_transforms = ComposeTransform([self.thickness_flow_lognorm, ExpTransform()])
         self.thickness_flow_transforms = [self.thickness_flow_components, self.thickness_flow_constraint_transforms]

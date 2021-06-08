@@ -2,8 +2,9 @@ import torch
 import pyro
 
 from pyro.nn import pyro_method
+from pyro.distributions.torch_transform import ComposeTransformModule
 from pyro.distributions import Normal, TransformedDistribution
-from pyro.distributions.transforms import ComposeTransform, SigmoidTransform, spline
+from pyro.distributions.transforms import ComposeTransform, ExpTransform, SigmoidTransform, Spline
 
 from .base_sem_experiment import BaseVISEM, MODEL_REGISTRY
 from deepscm.distributions.transforms.affine import LearnedAffineTransform
@@ -15,21 +16,25 @@ class IndependentReversedVISEM(BaseVISEM):
         super().__init__(**kwargs)
 
         # Learned affine flow for intensity (Normal)
-        self.intensity_flow_components = LearnedAffineTransform()
+        self.intensity_flow_components = ComposeTransformModule([LearnedAffineTransform(), Spline(1)])
         self.intensity_flow_constraint_transforms = ComposeTransform([SigmoidTransform(), self.intensity_flow_norm])
         self.intensity_flow_transforms = [self.intensity_flow_components, self.intensity_flow_constraint_transforms]
 
         # Conditional Spline flow for thickness (Gamma)
-        self.thickness_flow_preprocess = ComposeTransform([self.thickness_flow_lognorm, SigmoidTransform()])
-        self.thickness_flow_components = spline(input_dim=1, count_bins=8, bound=1)
-        self.thickness_flow_constraint_transforms = ComposeTransform([
-            SigmoidTransform().inv,
-        ])
-        self.thickness_flow_transforms = [
-            self.thickness_flow_preprocess,
-            self.thickness_flow_components,
-            self.thickness_flow_constraint_transforms,
-        ]
+        self.thickness_flow_components = ComposeTransformModule([Spline(1)])
+        self.thickness_flow_constraint_transforms = ComposeTransform([self.thickness_flow_lognorm, ExpTransform()])
+        self.thickness_flow_transforms = [self.thickness_flow_components, self.thickness_flow_constraint_transforms]
+
+        # self.thickness_flow_preprocess = ComposeTransform([self.thickness_flow_lognorm, SigmoidTransform()])
+        # self.thickness_flow_components = spline(input_dim=1, count_bins=8, bound=1)
+        # self.thickness_flow_constraint_transforms = ComposeTransform([
+        #     SigmoidTransform().inv,
+        # ])
+        # self.thickness_flow_transforms = [
+        #     self.thickness_flow_preprocess,
+        #     self.thickness_flow_components,
+        #     self.thickness_flow_constraint_transforms,
+        # ]
 
     @pyro_method
     def pgm_model(self):
