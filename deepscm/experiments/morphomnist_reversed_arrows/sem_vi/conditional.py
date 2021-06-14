@@ -20,7 +20,7 @@ class ConditionalDecoderReversedVISEM(BaseVISEM):
         self.intensity_flow_components = ComposeTransformModule([LearnedAffineTransform(), Spline(1)])
         # self.intensity_flow_components = LearnedAffineTransform()
         self.intensity_flow_constraint_transforms = ComposeTransform([SigmoidTransform(), self.intensity_flow_norm])
-        self.intensity_flow_transforms = [self.intensity_flow_components, self.intensity_flow_constraint_transforms]
+        self.intensity_flow_transforms = ComposeTransform([self.intensity_flow_components, self.intensity_flow_constraint_transforms])
 
         # Conditional Spline flow for thickness (Gamma)
         # self.thickness_flow_components = spline(input_dim=1, count_bins=8, bound=1)

@@ -28,7 +28,7 @@ class ConditionalReversedVISEM(BaseVISEM):
         self.intensity_flow_transforms = [self.intensity_flow_components, self.intensity_flow_constraint_transforms]
 
         # Conditional Spline flow for thickness (Gamma)
-        # 8 and 3 are the default parameters
+        # count_bins = 8 and bound = 3 are the default parameters
         self.thickness_flow_components = conditional_spline(1, 1, count_bins=8, bound=3., order='linear')
         self.thickness_flow_constraint_transforms = ComposeTransform([self.thickness_flow_lognorm, ExpTransform()])
         self.thickness_flow_transforms = [self.thickness_flow_components, self.thickness_flow_constraint_transforms]

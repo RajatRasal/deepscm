@@ -18,7 +18,7 @@ class IndependentReversedVISEM(BaseVISEM):
         # Learned affine flow for intensity (Normal)
         self.intensity_flow_components = ComposeTransformModule([LearnedAffineTransform(), Spline(1)])
         self.intensity_flow_constraint_transforms = ComposeTransform([SigmoidTransform(), self.intensity_flow_norm])
-        self.intensity_flow_transforms = [self.intensity_flow_components, self.intensity_flow_constraint_transforms]
+        self.intensity_flow_transforms = ComposeTransform([self.intensity_flow_components, self.intensity_flow_constraint_transforms])
 
         # Conditional Spline flow for thickness (Gamma)
         self.thickness_flow_components = ComposeTransformModule([Spline(1)])
