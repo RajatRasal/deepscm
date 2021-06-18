@@ -252,7 +252,6 @@ class BaseCovariateExperiment(pl.LightningModule):
         self.ukbb_test = test_dataset
 
         self.torch_device = self.trainer.root_gpu if self.trainer.on_gpu else self.trainer.root_device
-        print('-------------------', self.torch_device)
 
         # Ranges for plotting
         train_metrics = pd.concat([

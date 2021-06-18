@@ -71,7 +71,6 @@ class BaseVISEM(BaseSEM):
 
         # TODO: Remove hard coding
         self.img_shape = tuple(img_shape)
-        print(self.img_shape)
 
         self.latent_dim = latent_dim
         self.logstd_init = logstd_init
@@ -90,12 +89,7 @@ class BaseVISEM(BaseSEM):
 
         # CoMA pooling parameters
         # TODO: Remove this hack?
-        # print('----------------------------------------------')
-        # print(kwargs)
-        # print('----------------------------------------------')
-        # print()
-        device = torch.device('gpu' if gpu else 'cpu')
-        print('++++++++++++++++', device)
+        device = torch.device('cuda' if gpu else 'cpu')
         edge_index_list, down_transform_list, up_transform_list = init_coma_pooling(
             self.template, self.pooling_factor, self.depth, device,
         )
