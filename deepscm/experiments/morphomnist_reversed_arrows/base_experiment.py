@@ -382,15 +382,14 @@ class BaseCovariateExperiment(pl.LightningModule):
 
     def build_test_samples(self, batch):
         samples = {}
-        samples['reconstruction'] = {'x': self.pyro_model.reconstruct(**batch, num_particles=self.hparams.num_sample_particles)}
+        samples['reconstruction'] = {
+            'x': self.pyro_model.reconstruct(**batch, num_particles=self.hparams.num_sample_particles)
+        }
 
         counterfactuals = self.get_counterfactual_conditions(batch)
 
         for name, condition in counterfactuals.items():
-            # print(name, condition)
             samples[name] = self.pyro_model._gen_counterfactual(obs=batch, condition=condition)
-            # print(samples[name])
-            # print()
 
         return samples
 
