@@ -153,6 +153,10 @@ def load_model(base_log_path=BASE_LOG_PATH, exp='ConditionalVISEM', version='ver
     for key, value in ckpt['state_dict'].items():
         new_key = key.replace('pyro_model.', '')
         new_state_dict[new_key] = value
+        
+    print(model_params)
+    model_params['template_path'] = model_params['template_path'].replace('brainshapes', 'brainshapes/t0/')
+    # '/vol/biomedic3/bglocker/brainshapes/t0/5026976/T1_first-BrStem_first.vtk'
 
     loaded_model = model_class(**model_params)
     loaded_model.load_state_dict(new_state_dict)
