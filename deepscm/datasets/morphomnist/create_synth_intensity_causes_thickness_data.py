@@ -38,13 +38,13 @@ def model(n_samples=None, scale=0.5, invert=False):
         _i = (intensity - 66) / 190
         thickness = (-torch.log((1 / _i) - 1) + 5 - scale * noise) / 2
         
-        image_class_probs = [
-            0.0987, 0.1124, 0.0993, 0.1022, 0.0974,
-            0.0904, 0.0986, 0.1044, 0.0975, 0.0992
-        ]
-        labels = pyro.sample('labels', Categorical(torch.Tensor(image_class_probs)))
+        # image_class_probs = [
+        #     0.0987, 0.1124, 0.0993, 0.1022, 0.0974,
+        #     0.0904, 0.0986, 0.1044, 0.0975, 0.0992
+        # ]
+        # labels = pyro.sample('labels', Categorical(torch.Tensor(image_class_probs)))
     
-    return intensity, thickness, labels
+    return intensity, thickness  # , labels
 
 
 def gen_dataset(args, train=True):
@@ -60,7 +60,7 @@ def gen_dataset(args, train=True):
 
     n_samples = len(images)
     with torch.no_grad():
-        intensity, thickness, _ = model(n_samples, scale=args.scale, invert=args.invert)
+        intensity, thickness = model(n_samples, scale=args.scale, invert=args.invert)
 
     metrics = pd.DataFrame(data={'thickness': thickness, 'intensity': intensity})
 
@@ -78,6 +78,27 @@ def gen_dataset(args, train=True):
     # TODO: do we want to save the sampled or the measured metrics?
 
     save_morphomnist_like(images, labels, metrics, args.out_dir, train=train)
+
+def gen_dataset_thickness_intervention(args, train=False, thickness_sf=1, intensity_sf=1):
+    images_, labels, metrics = load_morphomnist_like(args.data_dir, train=train)
+    n_samples = 10  # len(_images)
+    thickness_ = list(metrics.thickness.values * thickness_sf)
+    intensity_ = list(metrics.intensity.values * intensity_sf)
+
+    metrics = pd.DataFrame(data={'thickness': thickness, 'intensity': intensity})
+
+    images = np.zeros_like(images_)
+
+    for n, (thickness, intensity) in enumerate(tqdm(zip(thickness_, intensity_), total=n_samples)):
+        morph = ImageMorphology(images_[n], scale=16)
+        tmp_img = morph.downscale(np.float32(SetThickness(thickness)(morph)))
+
+        avg_intensity = get_intensity(tmp_img)
+        mult = intensity / avg_intensity
+        tmp_img = np.clip(tmp_img * mult, 0, 255)
+        images[n] = tmp_img
+    
+    save_morphomnist_like(images, labels, metrics, f'{args.out_dir}/t_{thickness_sf}/i_{intensity_sf}', train=train)
 
 
 if __name__ == '__main__':

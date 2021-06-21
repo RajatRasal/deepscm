@@ -59,9 +59,11 @@ if __name__ == '__main__':
     model_class = MODEL_REGISTRY[hparams['model']]
 
     model_params = {
-        k: v for k, v in hparams.items() if (k in inspect.signature(model_class.__init__).parameters
-                                             or k in k in inspect.signature(model_class.__bases__[0].__init__).parameters
-                                             or k in k in inspect.signature(model_class.__bases__[0].__bases__[0].__init__).parameters)
+        k: v for k, v in hparams.items() if (
+            k in inspect.signature(model_class.__init__).parameters
+            or k in k in inspect.signature(model_class.__bases__[0].__init__).parameters
+            or k in k in inspect.signature(model_class.__bases__[0].__bases__[0].__init__).parameters
+        )
     }
 
     print(f'building model with params: {model_params}')

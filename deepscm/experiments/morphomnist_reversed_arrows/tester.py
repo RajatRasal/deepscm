@@ -1,4 +1,4 @@
-from deepscm.experiments import morphomnist  # noqa: F401
+from deepscm.experiments import morphomnist_reversed_arrows  # noqa: F401
 from .base_experiment import EXPERIMENT_REGISTRY, MODEL_REGISTRY
 
 import torch
@@ -42,6 +42,8 @@ if __name__ == '__main__':
         os.environ['CUDA_VISIBLE_DEVICES'] = str(args.gpus)
         args.gpus = 1
 
+    args.gpus = 1
+
     # TODO: push to lightning
     args.gradient_clip_val = float(args.gradient_clip_val)
 
@@ -58,9 +60,11 @@ if __name__ == '__main__':
     model_class = MODEL_REGISTRY[hparams['model']]
 
     model_params = {
-        k: v for k, v in hparams.items() if (k in inspect.signature(model_class.__init__).parameters
-                                             or k in k in inspect.signature(model_class.__bases__[0].__init__).parameters
-                                             or k in k in inspect.signature(model_class.__bases__[0].__bases__[0].__init__).parameters)
+        k: v for k, v in hparams.items() if (
+            k in inspect.signature(model_class.__init__).parameters
+            or k in k in inspect.signature(model_class.__bases__[0].__init__).parameters
+            or k in k in inspect.signature(model_class.__bases__[0].__bases__[0].__init__).parameters
+        )
     }
 
     print(f'building model with params: {model_params}')
@@ -69,7 +73,7 @@ if __name__ == '__main__':
 
     from argparse import Namespace
 
-    experiment = exp_class(Namespace(**_hparams['hyper_parameters']), pyro_model=model)
+    experiment = exp_class(Namespace(**hparams), pyro_model=model)
 
     print(f'Loaded {experiment.__class__}:\n{experiment}')
 

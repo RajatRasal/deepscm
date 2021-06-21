@@ -404,12 +404,13 @@ class SVIExperiment(BaseCovariateExperiment):
         return {'loss': loss, **metrics}
 
     def test_step(self, batch, batch_idx):
-        # print('TEST STEP')
+        print('TEST STEP')
         batch = self.prep_batch(batch)
 
         loss = self.svi.evaluate_loss(**batch)
 
         metrics = self.get_trace_metrics(batch)
+        print(metrics)
 
         samples = self.build_test_samples(batch)
 
